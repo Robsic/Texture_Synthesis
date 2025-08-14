@@ -1,0 +1,7 @@
+data-set/
+generate_data_set/
+images/
+logs/
+training_checkpoints/
+venv/
+gputest.py
