@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import os
 
-batch_size = 32
+batch_size = 4
 img_height = 256
 img_width = 256
 
@@ -256,6 +256,14 @@ checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                  discriminator_optimizer=discriminator_optimizer,
                                  generator=generator,
                                  discriminator=discriminator)
+
+latest = tf.train.latest_checkpoint(checkpoint_dir)
+
+if latest:
+  checkpoint.restore(latest)
+  print("Checkpoint carregado")
+else:
+  print("Comeando do zero")
 
 def generate_images(model, test_input, tar):
   prediction = model(test_input, training=True)
