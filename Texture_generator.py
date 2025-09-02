@@ -5,23 +5,13 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import os
 
-batch_size = 4
+batch_size = 64
 img_height = 256
 img_width = 256
 
 OUTPUT_CHANNELS = 3
 
 def generate_files_path_multi(pairs, pattern='*.png', strict=True):
-    """
-    pairs: lista de tuplas (hm_dir, tx_dir), cada uma referente a uma data.
-           ex.: [
-               ('data-set/hm_to_texture/heightmap2021', 'data-set/hm_to_texture/texture2021'),
-               ('data-set/hm_to_texture/heightmap2025', 'data-set/hm_to_texture/texture2025'),
-           ]
-    pattern: glob de arquivos a considerar (padrão: '*.png')
-    strict:  se True, lança erro se algum diretório não existir.
-             se False, ignora par inexistente e segue.
-    """
     hm_all, tx_all = [], []
 
     for hm_dir, tx_dir in pairs:
@@ -110,7 +100,7 @@ def augment_pair(hm,tx):
     
     return hm,tx  
 
-def generate_holes(tx, min_size = 32, max_size = 96, fill_value = 1.0):
+def generate_holes(tx, min_size = 32, max_size = 128, fill_value = 1.0):
       # tx em [-1,1], shape (H, W, 3)
     h = tf.shape(tx)[0]
     w = tf.shape(tx)[1]
@@ -138,8 +128,8 @@ def denorm(x):  # [-1,1] -> [0,1] para plot
     return (x + 1.0) * 0.5   
 
 pairs= [
-    ("data-set/Hm_to_texture/2021/height_map","data-set/Hm_to_texture/2021/texture"),
-    ("data-set/Hm_to_texture/2025/height_map","data-set/Hm_to_texture/2025/texture")
+    ("Fill_Texture/data-set/2021/heightmap","Fill_Texture/data-set/2021/texture"),
+    ("Fill_Texture/data-set/2025/heightmap","Fill_Texture/data-set/2025/texture")
 ]
 
 hm_files,tx_files = generate_files_path_multi(pairs)
@@ -283,7 +273,7 @@ generator = Generator()
 discriminator = Discriminator()
 
 generator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-discriminator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+discriminator_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
 
 checkpoint_dir = './training_checkpoints'
 checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
@@ -291,7 +281,7 @@ checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                  discriminator_optimizer=discriminator_optimizer,
                                  generator=generator,
                                  discriminator=discriminator)
-
+"""
 latest = tf.train.latest_checkpoint(checkpoint_dir)
 
 if latest:
@@ -299,6 +289,7 @@ if latest:
   print("Checkpoint carregado")
 else:
   print("Comeando do zero")
+"""
 
 def generate_images(model, test_input, tar):
   prediction = model(test_input, training=True)
@@ -355,7 +346,17 @@ def fit(train_ds,steps):
   for step, (input_image, target, mask) in train_ds.repeat().take(steps).enumerate():
     
     if (step) % 1000 == 0:
-      
+
+      if step != 0:
+        print(f' Time taken for 1000 steps: {time.time()-start:.2f} sec\n')
+
+      start = time.time()
+
+      print(f"Step: {step//1000}k")
+
+    train_step(input_image, target, mask, step)
+    
+    if (step) % 2000 == 0:
       pred = generator(example_inp, training=False)
       
       with summary_writer.as_default():
@@ -371,15 +372,6 @@ def fit(train_ds,steps):
         # Loga máscara (já está em [0,1])
           tf.summary.image("mask", example_mask, step=step)
 
-      if step != 0:
-        print(f'Time taken for 1000 steps: {time.time()-start:.2f} sec\n')
-
-      start = time.time()
-
-      print(f"Step: {step//1000}k")
-
-    train_step(input_image, target, mask, step)
-
     # Training step
     if (step+1) % 10 == 0:
       print('.', end='', flush=True)
@@ -389,7 +381,7 @@ def fit(train_ds,steps):
     if (step + 1) % 5000 == 0:
       checkpoint.save(file_prefix=checkpoint_prefix)
       
-fit(dataset_holes,steps=2000)
+fit(dataset_holes,steps=50000)
       
 
 
