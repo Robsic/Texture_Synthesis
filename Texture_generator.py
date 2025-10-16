@@ -4,6 +4,8 @@ import time
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import os
+import numpy as np
+
 
 batch_size = 64
 img_height = 256
@@ -47,27 +49,40 @@ def generate_files_path_multi(pairs, pattern='*.png', strict=True):
 
     return hm_all, tx_all
 
-def manage_data_set(hm_files,tx_files, training = True):
-    
-    dataset_path = tf.data.Dataset.from_tensor_slices((hm_files,tx_files))
-    
-    dataset = dataset_path.map(load_pair, num_parallel_calls=tf.data.AUTOTUNE)
-    
+def train_val_split(hm_files, tx_files, val_ratio=0.10, seed=42):
+    assert len(hm_files) == len(tx_files), "Listas desalinhadas!"
+
+    n = len(hm_files)
+    idx = np.arange(n)
+
+    rng = np.random.RandomState(seed)   # split determinístico
+    rng.shuffle(idx)
+
+    n_val = int(np.round(n * val_ratio))
+    val_idx  = idx[:n_val]
+    train_idx = idx[n_val:]
+
+    hm_train = [hm_files[i] for i in train_idx]
+    tx_train = [tx_files[i] for i in train_idx]
+
+    hm_val = [hm_files[i] for i in val_idx]
+    tx_val = [tx_files[i] for i in val_idx]
+
+    return (hm_train, tx_train), (hm_val, tx_val)
+  
+def make_dataset(hm_files, tx_files, training=True,
+                 batch_size=32, img_height=256, img_width=256):
+    ds = tf.data.Dataset.from_tensor_slices((hm_files, tx_files))
+    ds = ds.map(load_pair, num_parallel_calls=tf.data.AUTOTUNE)
+
     if training:
-        dataset = dataset.map(augment_pair, num_parallel_calls=tf.data.AUTOTUNE)
-        dataset = dataset.shuffle(1000, reshuffle_each_iteration=True)
-    
-    dataset = dataset.batch(batch_size, drop_remainder=True).prefetch(tf.data.AUTOTUNE)
-    
-    return dataset
-    
-def make_inpanting_example(hm, tx):
-    
-    inp = hm
-    tgt = tx
-    
-    return inp, tgt       
-    
+        ds = ds.map(augment_pair, num_parallel_calls=tf.data.AUTOTUNE)
+        ds = ds.shuffle(1000, reshuffle_each_iteration=True)
+
+    ds = ds.batch(batch_size, drop_remainder=True)
+    ds = ds.prefetch(tf.data.AUTOTUNE)
+    return ds
+          
 def load_pair(hm_path, tx_path):
     hm = tf.io.read_file(hm_path)
     hm = tf.image.decode_png(hm, channels=1)
@@ -97,17 +112,23 @@ def augment_pair(hm,tx):
     
     return hm,tx  
 
-def denorm(x):  # [-1,1] -> [0,1] para plot
-    return (x + 1.0) * 0.5   
-
 pairs= [
+    ("Fill_Texture/data-set/2025/heightmap","Fill_Texture/data-set/2025/texture"),
     ("Fill_Texture/data-set/2021/heightmap","Fill_Texture/data-set/2021/texture"),
-    ("Fill_Texture/data-set/2025/heightmap","Fill_Texture/data-set/2025/texture")
+    ("Fill_Texture/data-set/2021/Cut_TOPO_ITA/1/heightmap","Fill_Texture/data-set/2021/Cut_TOPO_ITA/1/texture"),
+    ("Fill_Texture/data-set/2021/Cut_TOPO_ITA/2/heightmap","Fill_Texture/data-set/2021/Cut_TOPO_ITA/2/texture"),
+    ("Fill_Texture/data-set/2021/Cut_TOPO_ITA/3/heightmap","Fill_Texture/data-set/2021/Cut_TOPO_ITA/3/texture"),
 ]
 
 hm_files,tx_files = generate_files_path_multi(pairs)
 
-dataset = manage_data_set(hm_files,tx_files)
+(train_hm, train_tx), (val_hm, val_tx) = train_val_split(hm_files, tx_files, val_ratio=0.10, seed=42)
+
+train_ds = make_dataset(train_hm, train_tx, training=True,
+                        batch_size=batch_size, img_height=img_height, img_width=img_width)
+
+val_ds   = make_dataset(val_hm, val_tx, training=False,
+                        batch_size=batch_size, img_height=img_height, img_width=img_width)
 
 def downsample(filters, size, apply_batchnorm=True):
   initializer = tf.random_normal_initializer(0., 0.02)
@@ -248,13 +269,13 @@ discriminator = Discriminator()
 generator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 discriminator_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
 
-checkpoint_dir = 'Pix2Pix_Classic/training_checkpoints'
+checkpoint_dir = 'Pix2Pix_Classic/Big_dataset/checkpoints'
 checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
 checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                  discriminator_optimizer=discriminator_optimizer,
                                  generator=generator,
                                  discriminator=discriminator)
-"""
+
 latest = tf.train.latest_checkpoint(checkpoint_dir)
 
 if latest:
@@ -262,7 +283,6 @@ if latest:
   print("Checkpoint carregado")
 else:
   print("Comeando do zero")
-"""
 
 def generate_images(model, test_input, tar):
   prediction = model(test_input, training=True)
@@ -279,10 +299,10 @@ def generate_images(model, test_input, tar):
     plt.axis('off')
   plt.show()
   
-log_dir="Pix2Pix_Classic/logs"
+log_dir="Pix2Pix_Classic/Big_dataset/logs"
 
 summary_writer = tf.summary.create_file_writer(
-  log_dir + "/fit" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+  log_dir + "/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
 
 @tf.function
 def train_step(input_image, target, step):
@@ -310,6 +330,39 @@ def train_step(input_image, target, step):
     tf.summary.scalar('gen_gan_loss', gen_gan_loss, step=step//1000)
     tf.summary.scalar('gen_l1_loss', gen_l1_loss, step=step//1000)
     tf.summary.scalar('disc_loss', disc_loss, step=step//1000)
+
+@tf.function
+def val_step(input_image, target):
+    gen_out = generator(input_image, training=False)
+    # se seu generator_loss atual usa máscara, passe uma máscara de 1s (sem peso especial)
+    # ou crie uma variante de loss para o caso HM->TX (sem máscara).
+    disc_fake = discriminator([input_image, gen_out], training=False)
+    disc_real = discriminator([input_image, target],   training=False)
+
+    gen_total_loss, gen_gan_loss, gen_l1_loss = generator_loss(disc_fake, gen_out, target)  # adapte se precisar de mask
+    disc_loss_ = discriminator_loss(disc_real, disc_fake)
+    return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss_
+
+def evaluate_val(val_ds, global_step, max_batches=None):
+    # agrega métricas
+    g_tot = g_gan = g_l1 = d_loss = 0.0
+    n = 0
+    for b, (inp, tgt) in enumerate(val_ds):
+        gt, gg, gl1, dl = val_step(inp, tgt)
+        g_tot += float(gt); g_gan += float(gg); g_l1 += float(gl1); d_loss += float(dl)
+        n += 1
+        if max_batches is not None and (b+1) >= max_batches:
+            break
+    if n == 0: return
+    g_tot /= n; g_gan /= n; g_l1 /= n; d_loss /= n
+
+    with summary_writer.as_default():
+        tf.summary.scalar('val/gen_total_loss', g_tot, step=global_step)
+        tf.summary.scalar('val/gen_gan_loss',   g_gan, step=global_step)
+        tf.summary.scalar('val/gen_l1_loss',    g_l1,  step=global_step)
+        tf.summary.scalar('val/disc_loss',      d_loss,step=global_step)
+
+    print(f"[VAL] step {global_step}: gen_total={g_tot:.4f} | gen_gan={g_gan:.4f} | gen_l1={g_l1:.4f} | disc={d_loss:.4f}")
 
 def fit(train_ds,steps):
   start = time.time()
@@ -346,13 +399,13 @@ def fit(train_ds,steps):
     if (step+1) % 10 == 0:
       print('.', end='', flush=True)
 
-    # Save (checkpoint) the model every 5k steps
+    # Save (checkpoint) the model every 5k steps and validate the model
     if (step + 1) % 5000 == 0:
       checkpoint.save(file_prefix=checkpoint_prefix)
       
-fit(dataset,steps=50000)
-      
+      evaluate_val(val_ds,global_step=int(step)+1,max_batches=None)
 
+generator.save("Modelo_Treinados/Big_dataset_100k")
 
 
 
