@@ -5,3 +5,5 @@ logs/
 training_checkpoints/
 venv/
 gputest.py
+Test_Images/
+pix2pix.py
