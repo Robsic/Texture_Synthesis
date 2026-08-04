@@ -13,40 +13,37 @@ def generate_files_path_multi(pairs, pattern='*.png', strict=True):
 
         if strict:
             if not hm_dir.exists():
-                raise FileNotFoundError(f"Diretório não existe: {hm_dir}")
+                raise FileNotFoundError(f"Directory does not exist: {hm_dir}")
             if not tx_dir.exists():
-                raise FileNotFoundError(f"Diretório não existe: {tx_dir}")
+                raise FileNotFoundError(f"Directory does not exist: {tx_dir}")
         else:
             if not hm_dir.exists() or not tx_dir.exists():
-                print(f"[Aviso] Ignorando par inexistente: {hm_dir} | {tx_dir}")
+                print(f"[Warning] Skipping missing pair: {hm_dir} | {tx_dir}")
                 continue
 
-        # indexa por nome de arquivo
         hm_files = {p.name: p for p in hm_dir.glob(pattern)}
         tx_files = {p.name: p for p in tx_dir.glob(pattern)}
 
         common = sorted(set(hm_files) & set(tx_files))
         if not common:
-            print(f"[Aviso] Sem nomes em comum entre {hm_dir} e {tx_dir}")
+            print(f"[Warning] No matching file names between {hm_dir} and {tx_dir}")
 
-        # estende as listas globais preservando o pareamento
         hm_all.extend(str(hm_files[n]) for n in common)
         tx_all.extend(str(tx_files[n]) for n in common)
 
-    # checagem final: tamanhos devem casar
     if len(hm_all) != len(tx_all):
-        raise ValueError(f"Listas desalinhadas: {len(hm_all)} HMs vs {len(tx_all)} TXs")
+        raise ValueError(f"Misaligned lists: {len(hm_all)} HMs vs {len(tx_all)} TXs")
 
     return hm_all, tx_all
 
 
 def train_val_split(hm_files, tx_files, val_ratio=0.10, seed=42):
-    assert len(hm_files) == len(tx_files), "Listas desalinhadas!"
+    assert len(hm_files) == len(tx_files), "Misaligned lists!"
 
     n = len(hm_files)
     idx = np.arange(n)
 
-    rng = np.random.RandomState(seed)   # split determinístico
+    rng = np.random.RandomState(seed)
     rng.shuffle(idx)
 
     n_val = int(np.round(n * val_ratio))
@@ -77,7 +74,6 @@ def load_pair(hm_path, tx_path, img_height, img_width):
 
 
 def augment_pair(hm, tx):
-    # flip horizontal
     if tf.random.uniform(()) < 0.5:
         hm = tf.image.flip_left_right(hm)
         tx = tf.image.flip_left_right(tx)
@@ -109,7 +105,7 @@ def make_dataset(hm_files, tx_files, training=True,
 
 
 def build_datasets(pairs, val_ratio, seed, batch_size, img_height, img_width):
-    """Encadeia os passos acima: lista arquivos -> separa treino/val -> monta os tf.data.Dataset."""
+    """Chains the steps above: list files -> split train/val -> build the tf.data.Dataset objects."""
     hm_files, tx_files = generate_files_path_multi(pairs)
 
     (train_hm, train_tx), (val_hm, val_tx) = train_val_split(

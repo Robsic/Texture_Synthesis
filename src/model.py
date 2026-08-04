@@ -72,7 +72,6 @@ def Generator():
 
     x = inputs
 
-    # Downsampling through the model
     skips = []
     for down in down_stack:
         x = down(x)
@@ -80,7 +79,6 @@ def Generator():
 
     skips = reversed(skips[:-1])
 
-    # Upsampling and establishing the skip connections
     for up, skip in zip(up_stack, skips):
         x = up(x)
         x = tf.keras.layers.Concatenate()([x, skip])
@@ -125,7 +123,6 @@ loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 def generator_loss(disc_generated_output, gen_output, target):
     gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
 
-    # Mean absolute error
     l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
 
     total_gen_loss = gan_loss + (LAMBDA * l1_loss)

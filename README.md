@@ -1,9 +1,5 @@
 # Pix2Pix — Texture Generation from Height Maps
 
-![Example output: input height map, ground truth texture, generated texture](docs/example_output.png)
-
-### What is this repository for? ###
-
 This repository contains an image-to-image translation model based on the **Pix2Pix (conditional GAN)** architecture, trained to synthesise RGB terrain textures from grayscale height maps. It includes the training script, the loss/metric logging setup, checkpoint management, and a small example dataset so the code can be run end-to-end without downloading the full dataset.
 
 *** Please cite the software as: ***
@@ -16,8 +12,8 @@ This repository contains an image-to-image translation model based on the **Pix2
 
 1. [Requirements and Installation](#requirements-and-installation)
 2. [Repository Contents](#repository-contents)
-3. [Quick Test](#quick-test)
-4. [Directory Structure](#directory-structure)
+3. [Directory Structure](#directory-structure)
+4. [Quick Test](#quick-test)
 5. [Dataset Generation](#dataset-generation)
 6. [Configuring the Dataset](#configuring-the-dataset)
 7. [Tuning Hyperparameters](#tuning-hyperparameters)
@@ -26,8 +22,9 @@ This repository contains an image-to-image translation model based on the **Pix2
 10. [Checkpoints and Resuming Training](#checkpoints-and-resuming-training)
 11. [Saving the Final Model](#saving-the-final-model)
 12. [Inference with a Trained Model](#inference-with-a-trained-model)
-13. [Who do I talk to?](#who-do-i-talk-to)
-14. [License](#license)
+13. [Pre-trained Model](#pre-trained-model)
+14. [Who do I talk to?](#who-do-i-talk-to)
+15. [License](#license)
 
 ---
 
@@ -57,85 +54,72 @@ Training on CPU is possible but slow. A CUDA-capable GPU is recommended; the res
 
 | File / directory | Description |
 |---|---|
-| `train_pix2pix.py` | Main training script (data loading, model definition, training loop, checkpointing) |
-| `inference.py` | Loads a saved generator and produces a texture from a height map |
+| `src/config.py` | All hyperparameters and paths (dataset pairs, batch size, learning rate weight, checkpoint/log/model directories, training steps) |
+| `src/dataset.py` | Pairs height-map/texture files by name, splits train/validation, builds the `tf.data` pipeline and augmentation |
+| `src/model.py` | Generator (U-Net) and Discriminator (PatchGAN) architectures, and the GAN + L1 losses |
+| `src/train.py` | Training entry point (data loading, training loop, checkpointing, TensorBoard logging) |
+| `predict.py` | Loads a saved generator and runs sliding-window inference on a full-size height map |
 | `requirements.txt` | Python dependencies |
-| `example/` | Small example dataset used by the quick test (see below) |
-| `Fill_Texture/data-set/` | Location where the full training dataset is expected |
-| `Pix2Pix_Classic/Big_dataset/` | Checkpoints and TensorBoard logs written during training |
-| `Modelo_Treinados/` | Final saved models (SavedModel format) |
-
-> Adjust the file names above to match the actual scripts in the repository.
-
----
-
-## Quick Test
-
-A small example dataset is provided in `example/` so that the installation can be verified in a few minutes, without the full dataset:
-
-```
-example/
-├── heightmap/     ← <N> grayscale .png images (1 channel)
-└── texture/       ← <N> RGB .png images (3 channels), same file names
-```
-
-### 1. Test the training loop
-
-Run a short training run on the example data:
-
-```bash
-python train_pix2pix.py --data example --steps 200 --batch_size 4
-```
-
-Expected behaviour: the console prints a progress dot every 10 steps and the elapsed time, a `checkpoints/` directory is created, and sample images appear under `logs/`. The run should finish in a few minutes on a laptop GPU. The output at 200 steps is not meant to look good — the test only verifies that the pipeline runs.
-
-### 2. Test inference with the provided pre-trained model
-
-A pre-trained generator is included in `Modelo_Treinados/<MODEL NAME>/`:
-
-```bash
-python inference.py --model Modelo_Treinados/<MODEL NAME> \
-                    --input example/heightmap/<FILE>.png \
-                    --output prediction.png
-```
-
-This writes `prediction.png`, the RGB texture synthesised from the input height map.
+| `testing_files/sample_images/` | 35 paired example tiles (`Hm/` height maps, `Tx/` textures, 256×256) used as the default training set |
+| `testing_files/full_heightmap/` | Full-size height map used by `predict.py` |
+| `testing_files/pre_trained_model/` | Pre-trained generator (SavedModel format) — not tracked in git, see [Pre-trained Model](#pre-trained-model) |
+| `tensorboard/checkpoints/` | Training checkpoints (created automatically, gitignored) |
+| `tensorboard/logs/` | TensorBoard logs (created automatically, gitignored) |
+| `results/` | Output images written by `predict.py` (gitignored) |
 
 ---
 
 ## Directory Structure
 
-Each pair of directories must contain images with **identical file names** — pairing is done by file name.
+Each pair of directories referenced in `PAIRS` (`src/config.py`) must contain images with **identical file names** — pairing is done by file name.
 
 ```
-project/
+Fill_Texture/
 │
-├── Fill_Texture/
-│   └── data-set/
-│       ├── 2025/
-│       │   ├── heightmap/        ← grayscale .png images (1 channel)
-│       │   └── texture/          ← colour .png images (3 channels)
-│       │
-│       └── 2021/
-│           ├── heightmap/
-│           ├── texture/
-│           └── Cut_TOPO_ITA/
-│               ├── 1/
-│               │   ├── heightmap/
-│               │   └── texture/
-│               ├── 2/ ...
-│               └── 3/ ...
+├── src/
+│   ├── config.py
+│   ├── dataset.py
+│   ├── model.py
+│   └── train.py
 │
-├── Pix2Pix_Classic/
-│   └── Big_dataset/
-│       ├── checkpoints/          ← checkpoints saved automatically
-│       └── logs/                 ← TensorBoard logs
+├── predict.py
 │
-└── Modelo_Treinados/
-    └── Big_dataset_100k/         ← final saved model
+├── testing_files/
+│   ├── sample_images/
+│   │   ├── Hm/                 ← grayscale .png height maps (1 channel)
+│   │   └── Tx/                 ← colour .png textures (3 channels)
+│   ├── full_heightmap/
+│   │   └── hm_2021.png         ← used by predict.py
+│   └── pre_trained_model/      ← downloaded from Zenodo, see below
+│
+├── tensorboard/
+│   ├── checkpoints/            ← written automatically during training
+│   └── logs/                   ← TensorBoard logs
+│
+└── results/                    ← predictions written by predict.py
 ```
 
-> **Note:** height maps must be **1-channel** PNG images and textures **3-channel** PNG images. Any other format requires changing the `load_pair` functions.
+> **Note:** height maps must be **1-channel** PNG images and textures **3-channel** PNG images. Any other format requires changing `load_pair` in `src/dataset.py`.
+
+---
+
+## Quick Test
+
+`src/config.py` ships pointed at the 35 example pairs in `testing_files/sample_images/`, with `STEPS = 1000`, so the pipeline can be verified end-to-end in a few minutes without the full dataset:
+
+```bash
+python -m src.train
+```
+
+Expected behaviour: the console prints a progress dot every 10 steps and the elapsed time every 1,000 steps, checkpoints are written to `tensorboard/checkpoints/`, and sample images appear under `tensorboard/logs/`. The output at 1,000 steps is not meant to look good — the test only verifies that the pipeline runs.
+
+To test inference with the pre-trained model (see [Pre-trained Model](#pre-trained-model) to obtain it):
+
+```bash
+python predict.py
+```
+
+This reads `testing_files/full_heightmap/hm_2021.png` and writes `results/prediction.png`.
 
 ---
 
@@ -151,49 +135,40 @@ https://github.com/DaviBossi/generate_data_set
 
 ### Adding new data
 
-To add new image pairs to the training set, append an entry to the `pairs` list with the path to the height map directory and to the corresponding texture directory:
+To add new image pairs to the training set, append an entry to the `PAIRS` list in `src/config.py` with the path to the height map directory and to the corresponding texture directory:
 
 ```python
-pairs = [
-    # existing pairs
-    ("Fill_Texture/data-set/2025/heightmap", "Fill_Texture/data-set/2025/texture"),
-    ("Fill_Texture/data-set/2021/heightmap", "Fill_Texture/data-set/2021/texture"),
+PAIRS = [
+    ("./testing_files/sample_images/Hm", "./testing_files/sample_images/Tx"),
 
     # new pair — just add the line below
-    ("Fill_Texture/data-set/new_batch/heightmap", "Fill_Texture/data-set/new_batch/texture"),
+    ("path/to/new_batch/heightmap", "path/to/new_batch/texture"),
 ]
 ```
 
-> The script matches file names across the two directories automatically. Files without a counterpart are skipped and reported in the console.
+> `generate_files_path_multi` (`src/dataset.py`) matches file names across the two directories automatically. Files without a counterpart are skipped and reported in the console.
 
 ### Adjusting the validation split
 
-The `val_ratio` parameter in `train_val_split` controls how much of the dataset is held out for validation (default: 10%):
+`VAL_RATIO` in `src/config.py` controls how much of the dataset is held out for validation (default: 10%):
 
 ```python
-# Example: hold out 15% for validation
-(train_hm, train_tx), (val_hm, val_tx) = train_val_split(
-    hm_files, tx_files,
-    val_ratio=0.15,   # ← change here
-    seed=42
-)
+VAL_RATIO = 0.10   # ← change here, e.g. 0.15 for 15%
+SEED = 42          # keeps the split reproducible; change it for a different shuffle
 ```
-
-The `seed` keeps the split reproducible. Change it for a different shuffle.
 
 ---
 
 ## Tuning Hyperparameters
 
+All hyperparameters live in `src/config.py`.
+
 ### Learning rate
 
-The generator and the discriminator have separate learning rates:
+The generator and the discriminator have separate learning rates, set in `src/train.py`:
 
 ```python
-# Generator — default: 2e-4
 generator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-
-# Discriminator — default: 1e-4
 discriminator_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
 ```
 
@@ -207,32 +182,24 @@ discriminator_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
 
 ### L1 loss weight (LAMBDA)
 
-`LAMBDA` controls how much the generator is penalised for pixel-wise differences from the ground truth. Default: `100`.
-
-```python
-LAMBDA = 100  # ← at the top of the script
-```
+`LAMBDA` (`src/config.py`) controls how much the generator is penalised for pixel-wise differences from the ground truth. Default: `100`.
 
 - **Higher** values make the output closer to the ground truth, but the texture may become blurrier.
 - **Lower** values give the generator more freedom, at the risk of artefacts.
 
 ### Batch size
 
-```python
-batch_size = 64  # ← at the top of the script
-```
-
-Reduce this if the GPU runs out of memory (OOM). Values such as `16` or `32` work well, with some impact on training stability.
+`BATCH_SIZE` in `src/config.py` (default `4`). Reduce this if the GPU runs out of memory (OOM); increase it for faster convergence on larger datasets, with some impact on training stability.
 
 ---
 
 ## Starting the Training
 
-Training is launched through the `fit` function, which takes the total number of **steps** (iterations over individual batches) and the training dataset:
-
-```python
-fit(train_ds, steps=100_000)
+```bash
+python -m src.train
 ```
+
+Training runs for `STEPS` (`src/config.py`) iterations over individual batches.
 
 ### Behaviour of `fit`
 
@@ -243,14 +210,7 @@ fit(train_ds, steps=100_000)
 | Every **2,000 steps** | Writes sample images (input, ground truth, prediction) to TensorBoard |
 | Every **5,000 steps** | Saves a checkpoint and evaluates the metrics on the validation set |
 
-### Example
-
-```python
-# Train for 50,000 steps from the current state (or from scratch)
-fit(train_ds, steps=50_000)
-```
-
-> **Automatic resume:** if checkpoints already exist in `Pix2Pix_Classic/Big_dataset/checkpoints/`, the script loads them before training starts. No manual change is needed to continue from where it stopped.
+> **Automatic resume:** if checkpoints already exist in `tensorboard/checkpoints/`, the script loads the most recent one before training starts. No manual change is needed to continue from where it stopped.
 
 ---
 
@@ -259,7 +219,7 @@ fit(train_ds, steps=50_000)
 TensorBoard is fed automatically during training. To open it:
 
 ```bash
-tensorboard --logdir Pix2Pix_Classic/Big_dataset/logs
+tensorboard --logdir tensorboard/logs
 ```
 
 Available metrics:
@@ -281,56 +241,61 @@ Besides the numerical metrics, the **Images** tab shows how the predictions evol
 Checkpoints are saved automatically every 5,000 steps in:
 
 ```
-Pix2Pix_Classic/Big_dataset/checkpoints/
+tensorboard/checkpoints/
 ```
 
-TensorFlow keeps the **5 most recent checkpoints** by default. To keep more, pass `max_to_keep` when creating the checkpoint manager:
+via a `tf.train.CheckpointManager`, which keeps the **5 most recent checkpoints** by default (`src/train.py`). To keep more, change `max_to_keep`:
 
 ```python
-checkpoint = tf.train.Checkpoint(...)
-manager = tf.train.CheckpointManager(checkpoint, checkpoint_dir, max_to_keep=10)
+checkpoint_manager = tf.train.CheckpointManager(checkpoint, CHECKPOINT_DIR, max_to_keep=10)
 ```
 
-To restore a specific checkpoint instead of the most recent one, replace the automatic restore:
+To restore a specific checkpoint instead of the most recent one, replace the automatic restore with:
 
 ```python
-latest = tf.train.latest_checkpoint(checkpoint_dir)
-```
-
-with:
-
-```python
-checkpoint.restore("Pix2Pix_Classic/Big_dataset/checkpoints/ckpt-3")
+checkpoint.restore("tensorboard/checkpoints/ckpt-3")
 ```
 
 ---
 
 ## Saving the Final Model
 
-At the end of the script, the generator can be saved in the TensorFlow **SavedModel** format:
+At the end of training, the generator is saved in the TensorFlow **SavedModel** format to `MODEL_SAVE_PATH` (`src/config.py`, default `testing_files/pre_trained_model`):
 
 ```python
-generator.save("Modelo_Treinados/Big_dataset_100k")
+generator.save(MODEL_SAVE_PATH)
 ```
-
-Change the path above to save it elsewhere or under a different name.
 
 ---
 
 ## Inference with a Trained Model
 
-A saved model can be loaded for inference without recreating the architecture:
+`predict.py` loads a saved generator and runs sliding-window inference on a full-size height map (larger than the 256×256 tiles used in training), blending overlapping tiles with a 2D Hann window:
+
+```bash
+python predict.py
+```
+
+This reads `HEIGHTMAP_PATH` and writes the reconstructed texture to `OUTPUT_PATH` (both defined at the top of `predict.py`).
+
+For inference on a single 256×256 tile without the sliding-window logic:
 
 ```python
 import tensorflow as tf
 
-generator = tf.keras.models.load_model("Modelo_Treinados/Big_dataset_100k")
-
-# Inference
+generator = tf.keras.models.load_model("testing_files/pre_trained_model")
 prediction = generator(heightmap_input, training=False)
 ```
 
-> `training=False` disables Dropout during inference, which is required for deterministic results.
+---
+
+## Pre-trained Model
+
+The pre-trained generator (`testing_files/pre_trained_model/`) is **not** stored in this git repository — the model weights exceed GitHub's file size limit. It is hosted on Zenodo instead:
+
+<ZENODO 10.5281/zenodo.21792022 / [DOWNLOAD LINK](https://zenodo.org/records/21792022)>
+
+Download it and extract it into `testing_files/pre_trained_model/` before running `predict.py` or the inference snippet above.
 
 ---
 

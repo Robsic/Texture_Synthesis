@@ -1,10 +1,13 @@
 data-set/
 generate_data_set/
 images/
-logs/
-training_checkpoints/
 venv/
 gputest.py
 Test_Images/
 pix2pix.py
 testing_files/pre_trained_model/
+testing_files/pre_trained_model.zip
+*.zip
+tensorboard/checkpoints/
+tensorboard/logs/
+results/

@@ -1,5 +1,4 @@
 import datetime
-import os
 import time
 
 import matplotlib.pyplot as plt
@@ -11,23 +10,6 @@ from src.config import (
 )
 from src.dataset import build_datasets
 from src.model import Discriminator, Generator, discriminator_loss, generator_loss
-
-
-def generate_images(model, test_input, tar):
-    prediction = model(test_input, training=True)
-    plt.figure(figsize=(15, 15))
-
-    display_list = [test_input[0], tar[0], prediction[0]]
-    title = ['Input Image', 'Ground Truth', 'Predicted Image']
-
-    for i in range(3):
-        plt.subplot(1, 3, i + 1)
-        plt.title(title[i])
-        # Getting the pixel values in the [0, 1] range to plot.
-        plt.imshow(display_list[i] * 0.5 + 0.5)
-        plt.axis('off')
-    plt.show()
-
 
 @tf.function
 def train_step(input_image, target, step):
@@ -112,9 +94,8 @@ def fit(train_ds, val_ds, steps):
         if (step + 1) % 10 == 0:
             print('.', end='', flush=True)
 
-        # Save (checkpoint) the model every 5k steps and validate the model
         if (step + 1) % 5000 == 0:
-            checkpoint.save(file_prefix=checkpoint_prefix)
+            checkpoint_manager.save()
             evaluate_val(val_ds, global_step=int(step) + 1, max_batches=None)
 
 
@@ -127,27 +108,21 @@ if __name__ == "__main__":
     generator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     discriminator_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
 
-    checkpoint_prefix = os.path.join(CHECKPOINT_DIR, "ckpt")
     checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                       discriminator_optimizer=discriminator_optimizer,
                                       generator=generator,
                                       discriminator=discriminator)
+    checkpoint_manager = tf.train.CheckpointManager(checkpoint, CHECKPOINT_DIR, max_to_keep=5)
 
-    latest = tf.train.latest_checkpoint(CHECKPOINT_DIR)
-    if latest:
-        checkpoint.restore(latest)
-        print("Checkpoint carregado")
+    if checkpoint_manager.latest_checkpoint:
+        checkpoint.restore(checkpoint_manager.latest_checkpoint)
+        print("Checkpoint restored")
     else:
-        print("Comecando do zero")
+        print("Starting from scratch")
 
     summary_writer = tf.summary.create_file_writer(
         LOG_DIR + "/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
 
-    # NOTA(davi): no Texture_generator.py original, fit() era definido mas nunca
-    # chamado - o generator.save() rodava sobre o modelo recém-criado/restaurado,
-    # sem treinar. Adicionei a chamada abaixo para o treino de fato acontecer;
-    # STEPS em config.py foi inferido do nome da pasta de save ("...100k") e
-    # precisa da sua confirmação.
     fit(train_ds, val_ds, STEPS)
 
     generator.save(MODEL_SAVE_PATH)
