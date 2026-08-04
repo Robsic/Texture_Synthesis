@@ -7,3 +7,4 @@ venv/
 gputest.py
 Test_Images/
 pix2pix.py
+testing_files/pre_trained_model/

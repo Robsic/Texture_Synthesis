@@ -1,8 +1,16 @@
+import pathlib
+
 import numpy as np
-from tensorflow.keras.models import load_model
 import tensorflow as tf
-import matplotlib.pyplot as plt
 from PIL import Image
+from tensorflow.keras.models import load_model
+
+from src.config import MODEL_SAVE_PATH
+
+# TODO(davi): troque pelos caminhos reais quando o modelo treinado e o
+# heightmap de exemplo estiverem disponíveis.
+HEIGHTMAP_PATH = "images/heightmap/hm_2021.png"
+OUTPUT_PATH = "images/Resultados/Texture_dez_2025_151.png"
 
 def hann2d(tile):
     """Janela 2D de Hann (0..1..0) para suavizar as bordas."""
@@ -96,21 +104,28 @@ def load_image(path):
     
     return hm.numpy()
 
-def save_image(pred,path):
-    img =(pred + 1.0) / 2.0
-    
-    img_uint8 = (img*255).astype(np.uint8)
-    
+def save_image(pred, path):
+    img = (pred + 1.0) / 2.0
+    img = np.clip(img, 0.0, 1.0)  # blend por janela de Hann deveria manter [-1,1], mas sem clip qualquer estouro por float vira lixo silencioso no uint8
+
+    img_uint8 = (img * 255).astype(np.uint8)
+
+    pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(img_uint8).save(path)
-    
-generator = load_model("Modelo_Treinados/Big_dataset_100k")
-
-height_map_2021 = load_image("images/heightmap/hm_2021.png")
-
-pred_texture_2021 = sliding_window_predict(generator,height_map_2021,tile=256,stride=128)
-
-save_image(pred_texture_2021,path="images/Resultados/Texture_dez_2025_151.png")
 
 
+if __name__ == "__main__":
+    generator = load_model(MODEL_SAVE_PATH)
 
+    height_map = load_image(HEIGHTMAP_PATH)
 
+    # NOTA(davi): .predict() roda o gerador com training=False (usa a média
+    # móvel do BatchNorm aprendida no treino). Isso é consistente com o
+    # val_step usado durante o treino, mas diverge da convenção clássica do
+    # tutorial pix2pix (usar training=True na inferência). Compare
+    # visualmente as duas opções quando tiver o modelo em mãos - se
+    # training=True for melhor, dá pra trocar generator.predict(...) por
+    # generator(inp_np, training=True) dentro de flush_batch.
+    pred_texture = sliding_window_predict(generator, height_map, tile=256, stride=128)
+
+    save_image(pred_texture, path=OUTPUT_PATH)

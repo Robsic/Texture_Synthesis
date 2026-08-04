@@ -1,50 +1,120 @@
-# Pix2Pix — Geração de Textura a partir de Mapa de Altura
+# Pix2Pix — Texture Generation from Height Maps
 
-Modelo de geração de imagens baseado na arquitetura **Pix2Pix (cGAN)** que aprende a sintetizar texturas RGB a partir de mapas de altura em escala de cinza.
+![Example output: input height map, ground truth texture, generated texture](docs/example_output.png)
 
----
+### What is this repository for? ###
 
-## Índice
+This repository contains an image-to-image translation model based on the **Pix2Pix (conditional GAN)** architecture, trained to synthesise RGB terrain textures from grayscale height maps. It includes the training script, the loss/metric logging setup, checkpoint management, and a small example dataset so the code can be run end-to-end without downloading the full dataset.
 
-1. [Requisitos](#requisitos)
-2. [Estrutura de Diretórios](#estrutura-de-diretórios)
-3. [Configurando o Dataset](#configurando-o-dataset)
-4. [Ajustando Hiperparâmetros](#ajustando-hiperparâmetros)
-5. [Iniciando o Treinamento](#iniciando-o-treinamento)
-6. [Monitorando o Treinamento](#monitorando-o-treinamento)
-7. [Checkpoints e Retomada de Treino](#checkpoints-e-retomada-de-treino)
-8. [Salvando o Modelo Final](#salvando-o-modelo-final)
+*** Please cite the software as: ***
+
+<AUTHORS>, <TITLE OF THE PAPER>, Computers & Geosciences, <YEAR>, <DOI>
 
 ---
 
-## Requisitos
+## Table of Contents
+
+1. [Requirements and Installation](#requirements-and-installation)
+2. [Repository Contents](#repository-contents)
+3. [Quick Test](#quick-test)
+4. [Directory Structure](#directory-structure)
+5. [Dataset Generation](#dataset-generation)
+6. [Configuring the Dataset](#configuring-the-dataset)
+7. [Tuning Hyperparameters](#tuning-hyperparameters)
+8. [Starting the Training](#starting-the-training)
+9. [Monitoring the Training](#monitoring-the-training)
+10. [Checkpoints and Resuming Training](#checkpoints-and-resuming-training)
+11. [Saving the Final Model](#saving-the-final-model)
+12. [Inference with a Trained Model](#inference-with-a-trained-model)
+13. [Who do I talk to?](#who-do-i-talk-to)
+14. [License](#license)
+
+---
+
+## Requirements and Installation
+
+The code was developed and tested with:
 
 ```
-tensorflow >= 2.x
+python >= 3.9
+tensorflow >= 2.10
 matplotlib
 numpy
+pillow
 ```
+
+Install the dependencies with:
+
+```bash
+pip install -r requirements.txt
+```
+
+Training on CPU is possible but slow. A CUDA-capable GPU is recommended; the results reported in the paper were obtained on `<GPU MODEL>` with `<X>` GB of memory.
 
 ---
 
-## Geração de data - set
+## Repository Contents
 
-Para gerar os pares de heightmap - textura utilizar o repositório https://github.com/DaviBossi/generate_data_set
+| File / directory | Description |
+|---|---|
+| `train_pix2pix.py` | Main training script (data loading, model definition, training loop, checkpointing) |
+| `inference.py` | Loads a saved generator and produces a texture from a height map |
+| `requirements.txt` | Python dependencies |
+| `example/` | Small example dataset used by the quick test (see below) |
+| `Fill_Texture/data-set/` | Location where the full training dataset is expected |
+| `Pix2Pix_Classic/Big_dataset/` | Checkpoints and TensorBoard logs written during training |
+| `Modelo_Treinados/` | Final saved models (SavedModel format) |
+
+> Adjust the file names above to match the actual scripts in the repository.
 
 ---
 
-## Estrutura de Diretórios
+## Quick Test
 
-Cada par de diretórios deve conter imagens com **nomes idênticos** — o pareamento é feito pelo nome do arquivo.
+A small example dataset is provided in `example/` so that the installation can be verified in a few minutes, without the full dataset:
 
 ```
-projeto/
+example/
+├── heightmap/     ← <N> grayscale .png images (1 channel)
+└── texture/       ← <N> RGB .png images (3 channels), same file names
+```
+
+### 1. Test the training loop
+
+Run a short training run on the example data:
+
+```bash
+python train_pix2pix.py --data example --steps 200 --batch_size 4
+```
+
+Expected behaviour: the console prints a progress dot every 10 steps and the elapsed time, a `checkpoints/` directory is created, and sample images appear under `logs/`. The run should finish in a few minutes on a laptop GPU. The output at 200 steps is not meant to look good — the test only verifies that the pipeline runs.
+
+### 2. Test inference with the provided pre-trained model
+
+A pre-trained generator is included in `Modelo_Treinados/<MODEL NAME>/`:
+
+```bash
+python inference.py --model Modelo_Treinados/<MODEL NAME> \
+                    --input example/heightmap/<FILE>.png \
+                    --output prediction.png
+```
+
+This writes `prediction.png`, the RGB texture synthesised from the input height map.
+
+---
+
+## Directory Structure
+
+Each pair of directories must contain images with **identical file names** — pairing is done by file name.
+
+```
+project/
 │
 ├── Fill_Texture/
 │   └── data-set/
 │       ├── 2025/
-│       │   ├── heightmap/        ← imagens .png em escala de cinza (1 canal)
-│       │   └── texture/          ← imagens .png coloridas (3 canais)
+│       │   ├── heightmap/        ← grayscale .png images (1 channel)
+│       │   └── texture/          ← colour .png images (3 channels)
 │       │
 │       └── 2021/
 │           ├── heightmap/
@@ -58,168 +128,176 @@ projeto/
 │
 ├── Pix2Pix_Classic/
 │   └── Big_dataset/
-│       ├── checkpoints/          ← checkpoints salvos automaticamente
-│       └── logs/                 ← logs do TensorBoard
+│       ├── checkpoints/          ← checkpoints saved automatically
+│       └── logs/                 ← TensorBoard logs
 │
 └── Modelo_Treinados/
-    └── Big_dataset_100k/         ← modelo final salvo
+    └── Big_dataset_100k/         ← final saved model
 ```
 
-> **Atenção:** Heightmaps devem ser imagens PNG de **1 canal** e texturas PNG de **3 canais**. Qualquer outro formato exige alteração nas funções `load_pair`.
+> **Note:** height maps must be **1-channel** PNG images and textures **3-channel** PNG images. Any other format requires changing the `load_pair` functions.
 
 ---
 
-## Configurando o Dataset
+## Dataset Generation
 
-### Adicionando novos dados
+The height map / texture pairs used to train the model are produced with a separate tool:
 
-Para incluir novos pares de imagens ao treinamento, adicione uma entrada na lista `pairs`, informando o caminho para o diretório de heightmaps e o diretório de texturas correspondente:
+https://github.com/DaviBossi/generate_data_set
+
+---
+
+## Configuring the Dataset
+
+### Adding new data
+
+To add new image pairs to the training set, append an entry to the `pairs` list with the path to the height map directory and to the corresponding texture directory:
 
 ```python
 pairs = [
-    # pares existentes
+    # existing pairs
     ("Fill_Texture/data-set/2025/heightmap", "Fill_Texture/data-set/2025/texture"),
     ("Fill_Texture/data-set/2021/heightmap", "Fill_Texture/data-set/2021/texture"),
 
-    # novo par — basta adicionar a linha abaixo
-    ("Fill_Texture/data-set/novo_lote/heightmap", "Fill_Texture/data-set/novo_lote/texture"),
+    # new pair — just add the line below
+    ("Fill_Texture/data-set/new_batch/heightmap", "Fill_Texture/data-set/new_batch/texture"),
 ]
 ```
 
-> O script cruza automaticamente os nomes de arquivo entre os dois diretórios. Arquivos sem par correspondente são ignorados com um aviso no console.
+> The script matches file names across the two directories automatically. Files without a counterpart are skipped and reported in the console.
 
-### Ajustando a proporção de validação
+### Adjusting the validation split
 
-O parâmetro `val_ratio` em `train_val_split` controla quanto do dataset é reservado para validação (padrão: 10%):
+The `val_ratio` parameter in `train_val_split` controls how much of the dataset is held out for validation (default: 10%):
 
 ```python
-# Exemplo: reservar 15% para validação
+# Example: hold out 15% for validation
 (train_hm, train_tx), (val_hm, val_tx) = train_val_split(
     hm_files, tx_files,
-    val_ratio=0.15,   # ← altere aqui
+    val_ratio=0.15,   # ← change here
     seed=42
 )
 ```
 
-O `seed` garante que o split seja sempre o mesmo. Mude o valor se quiser um embaralhamento diferente.
+The `seed` keeps the split reproducible. Change it for a different shuffle.
 
 ---
 
-## Ajustando Hiperparâmetros
+## Tuning Hyperparameters
 
-### Learning Rate
+### Learning rate
 
-As taxas de aprendizado do gerador e do discriminador são definidas individualmente:
+The generator and the discriminator have separate learning rates:
 
 ```python
-# Gerador — padrão: 2e-4
+# Generator — default: 2e-4
 generator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 
-# Discriminador — padrão: 1e-4
+# Discriminator — default: 1e-4
 discriminator_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
 ```
 
-**Orientações práticas:**
+**Practical guidance:**
 
-| Situação observada | Ajuste sugerido |
+| Observed behaviour | Suggested adjustment |
 |---|---|
-| Discriminador muito forte (gerador estagnado) | Reduza o LR do discriminador ou aumente o do gerador |
-| Gerador colapsando para imagens iguais | Aumente levemente o LR do gerador |
-| Treinamento instável, losses oscilando muito | Reduza ambos os LRs proporcionalmente |
+| Discriminator too strong (generator stalled) | Lower the discriminator LR or raise the generator LR |
+| Generator collapsing to identical images | Raise the generator LR slightly |
+| Unstable training, strongly oscillating losses | Lower both LRs proportionally |
 
-### Peso da Loss L1 (LAMBDA)
+### L1 loss weight (LAMBDA)
 
-O parâmetro `LAMBDA` controla quanto o gerador é penalizado por diferenças pixel a pixel em relação ao ground truth. Padrão: `100`.
-
-```python
-LAMBDA = 100  # ← linha no topo do script
-```
-
-- Valores **maiores** tornam as saídas mais fiéis ao ground truth, mas podem deixar a textura mais "borrada".
-- Valores **menores** dão mais liberdade criativa ao gerador, mas podem gerar artefatos.
-
-### Tamanho do Batch
+`LAMBDA` controls how much the generator is penalised for pixel-wise differences from the ground truth. Default: `100`.
 
 ```python
-batch_size = 64  # ← linha no topo do script
+LAMBDA = 100  # ← at the top of the script
 ```
 
-Reduza se houver erros de memória (OOM na GPU). Valores menores como `16` ou `32` funcionam bem, com possível impacto na estabilidade do treino.
+- **Higher** values make the output closer to the ground truth, but the texture may become blurrier.
+- **Lower** values give the generator more freedom, at the risk of artefacts.
+
+### Batch size
+
+```python
+batch_size = 64  # ← at the top of the script
+```
+
+Reduce this if the GPU runs out of memory (OOM). Values such as `16` or `32` work well, with some impact on training stability.
 
 ---
 
-## Iniciando o Treinamento
+## Starting the Training
 
-O treinamento é iniciado pela função `fit`. Os parâmetros usados são o número total de **steps** (iterações sobre batches individuais) e o data-set destinado ao treinamento:
+Training is launched through the `fit` function, which takes the total number of **steps** (iterations over individual batches) and the training dataset:
 
 ```python
 fit(train_ds, steps=100_000)
 ```
 
-### Comportamento da função `fit`
+### Behaviour of `fit`
 
-| Frequência | Ação |
+| Frequency | Action |
 |---|---|
-| A cada **1.000 steps** | Exibe o tempo decorrido e o step atual no console |
-| A cada **10 steps** | Imprime um `.` para indicar progresso |
-| A cada **2.000 steps** | Salva amostras visuais (input, ground truth, predição) no TensorBoard |
-| A cada **5.000 steps** | Salva um checkpoint e avalia as métricas no conjunto de validação |
+| Every **1,000 steps** | Prints the elapsed time and the current step to the console |
+| Every **10 steps** | Prints a `.` as a progress indicator |
+| Every **2,000 steps** | Writes sample images (input, ground truth, prediction) to TensorBoard |
+| Every **5,000 steps** | Saves a checkpoint and evaluates the metrics on the validation set |
 
-### Exemplo de uso
+### Example
 
 ```python
-# Treinar por 50.000 steps a partir do estado atual (ou do zero)
+# Train for 50,000 steps from the current state (or from scratch)
 fit(train_ds, steps=50_000)
 ```
 
-> **Retomada automática:** se já existirem checkpoints em `Pix2Pix_Classic/Big_dataset/checkpoints/`, o script os carrega automaticamente antes do treino. Não é necessário nenhum ajuste manual para continuar de onde parou.
+> **Automatic resume:** if checkpoints already exist in `Pix2Pix_Classic/Big_dataset/checkpoints/`, the script loads them before training starts. No manual change is needed to continue from where it stopped.
 
 ---
 
-## Monitorando o Treinamento
+## Monitoring the Training
 
-O TensorBoard é alimentado automaticamente durante o treino. Para abrir:
+TensorBoard is fed automatically during training. To open it:
 
 ```bash
 tensorboard --logdir Pix2Pix_Classic/Big_dataset/logs
 ```
 
-As métricas disponíveis são:
+Available metrics:
 
-| Métrica | O que indica |
+| Metric | Meaning |
 |---|---|
-| `gen_total_loss` | Loss total do gerador (GAN + L1) |
-| `gen_gan_loss` | Componente adversarial da loss do gerador |
-| `gen_l1_loss` | Componente pixel-a-pixel (fidelidade ao ground truth) |
-| `disc_loss` | Loss do discriminador |
-| `val/*` | Versões de validação das métricas acima |
+| `gen_total_loss` | Total generator loss (GAN + L1) |
+| `gen_gan_loss` | Adversarial component of the generator loss |
+| `gen_l1_loss` | Pixel-wise component (fidelity to the ground truth) |
+| `disc_loss` | Discriminator loss |
+| `val/*` | Validation counterparts of the metrics above |
 
-Além das métricas numéricas, a aba **Images** exibe a evolução visual das predições ao longo do treino.
+Besides the numerical metrics, the **Images** tab shows how the predictions evolve during training.
 
 ---
 
-## Checkpoints e Retomada de Treino
+## Checkpoints and Resuming Training
 
-Checkpoints são salvos automaticamente a cada 5.000 steps em:
+Checkpoints are saved automatically every 5,000 steps in:
 
 ```
 Pix2Pix_Classic/Big_dataset/checkpoints/
 ```
 
-O TensorFlow mantém os **5 checkpoints mais recentes** por padrão. Para aumentar esse número, adicione o parâmetro `max_to_keep` na criação do checkpoint:
+TensorFlow keeps the **5 most recent checkpoints** by default. To keep more, pass `max_to_keep` when creating the checkpoint manager:
 
 ```python
 checkpoint = tf.train.Checkpoint(...)
 manager = tf.train.CheckpointManager(checkpoint, checkpoint_dir, max_to_keep=10)
 ```
 
-Para restaurar um checkpoint específico (em vez do mais recente), substitua a restauração automática: 
+To restore a specific checkpoint instead of the most recent one, replace the automatic restore:
 
 ```python
 latest = tf.train.latest_checkpoint(checkpoint_dir)
 ```
 
-por :
+with:
 
 ```python
 checkpoint.restore("Pix2Pix_Classic/Big_dataset/checkpoints/ckpt-3")
@@ -227,23 +305,44 @@ checkpoint.restore("Pix2Pix_Classic/Big_dataset/checkpoints/ckpt-3")
 
 ---
 
-## Salvando o Modelo Final
+## Saving the Final Model
 
-Ao final do script, o modelo do gerador pode ser salvo no formato **SavedModel** do TensorFlow:
+At the end of the script, the generator can be saved in the TensorFlow **SavedModel** format:
 
 ```python
 generator.save("Modelo_Treinados/Big_dataset_100k")
 ```
 
-Para alterar o destino ou o nome, modifique o caminho acima. O modelo salvo pode ser carregado posteriormente para inferência sem precisar recriar a arquitetura:
+Change the path above to save it elsewhere or under a different name.
+
+---
+
+## Inference with a Trained Model
+
+A saved model can be loaded for inference without recreating the architecture:
 
 ```python
 import tensorflow as tf
 
 generator = tf.keras.models.load_model("Modelo_Treinados/Big_dataset_100k")
 
-# Inferência
-predicao = generator(heightmap_input, training=False)
+# Inference
+prediction = generator(heightmap_input, training=False)
 ```
 
-> `training=False` desativa o Dropout durante a inferência, o que é necessário para resultados determinísticos.
+> `training=False` disables Dropout during inference, which is required for deterministic results.
+
+---
+
+## Who do I talk to? ###
+
+<AUTHOR NAME>, <INSTITUTION>
+*** <name> <dot> <surname> <at> <domain> ***
+
+---
+
+## License
+
+Copyright (C) <YEAR> <AUTHORS>
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see https://www.gnu.org/licenses/.
