@@ -4,7 +4,7 @@ This repository contains an image-to-image translation model based on the **Pix2
 
 *** Please cite the software as: ***
 
-<AUTHORS>, <TITLE OF THE PAPER>, Computers & Geosciences, <YEAR>, <DOI>
+BOSSI,Davi Pereira , AI-driven Texture Synthesis from Heightmaps: Anticipating Future Mine Topography for Immersive Training Environments, Computers & Geosciences, 2026, 
 
 ---
 
@@ -301,13 +301,12 @@ Download it and extract it into `testing_files/pre_trained_model/` before runnin
 
 ## Who do I talk to? ###
 
-<AUTHOR NAME>, <INSTITUTION>
-*** <name> <dot> <surname> <at> <domain> ***
+Davi Pereira Bossi, UNIFEI - Universidade Federal de Itajubá , davi.pereira2205@gmail.com
 
 ---
 
 ## License
 
-Copyright (C) <YEAR> <AUTHORS>
+Copyright (C) 2026 Bossi, Davi Pereira
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see https://www.gnu.org/licenses/.
