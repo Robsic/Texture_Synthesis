@@ -4,7 +4,7 @@ This repository contains an image-to-image translation model based on the **Pix2
 
 *** Please cite the software as: ***
 
-BOSSI,Davi Pereira , AI-driven Texture Synthesis from Heightmaps: Anticipating Future Mine Topography for Immersive Training Environments, Computers & Geosciences, 2026, 
+Davi Pereira Bossi, Rafael Luis Rodrigues Evangelista, Wendell Fioravante da Silva Diniz, Willian Gomes de Almeida, Bruno Messias Gomes da Silva, Giovani Bernardes Vitor. "AI-driven Texture Synthesis from Heightmaps: Anticipating Future Mine Topography for Immersive Training Environments."
 
 ---
 
@@ -22,9 +22,8 @@ BOSSI,Davi Pereira , AI-driven Texture Synthesis from Heightmaps: Anticipating F
 10. [Checkpoints and Resuming Training](#checkpoints-and-resuming-training)
 11. [Saving the Final Model](#saving-the-final-model)
 12. [Inference with a Trained Model](#inference-with-a-trained-model)
-13. [Pre-trained Model](#pre-trained-model)
-14. [Who do I talk to?](#who-do-i-talk-to)
-15. [License](#license)
+13. [Who do I talk to?](#who-do-i-talk-to)
+14. [License](#license)
 
 ---
 
@@ -46,7 +45,7 @@ Install the dependencies with:
 pip install -r requirements.txt
 ```
 
-Training on CPU is possible but slow. A CUDA-capable GPU is recommended; the results reported in the paper were obtained on `<GPU MODEL>` with `<X>` GB of memory.
+Training on CPU is possible but slow. A CUDA-capable GPU is recommended; the results reported in the paper were obtained on an NVIDIA RTX 4090 with 24 GB of memory.
 
 ---
 
@@ -58,11 +57,11 @@ Training on CPU is possible but slow. A CUDA-capable GPU is recommended; the res
 | `src/dataset.py` | Pairs height-map/texture files by name, splits train/validation, builds the `tf.data` pipeline and augmentation |
 | `src/model.py` | Generator (U-Net) and Discriminator (PatchGAN) architectures, and the GAN + L1 losses |
 | `src/train.py` | Training entry point (data loading, training loop, checkpointing, TensorBoard logging) |
+| `evaluate.py` | Loads the saved generator and computes MAE/PSNR/SSIM on the validation set |
 | `predict.py` | Loads a saved generator and runs sliding-window inference on a full-size height map |
 | `requirements.txt` | Python dependencies |
 | `testing_files/sample_images/` | 35 paired example tiles (`Hm/` height maps, `Tx/` textures, 256×256) used as the default training set |
 | `testing_files/full_heightmap/` | Full-size height map used by `predict.py` |
-| `testing_files/pre_trained_model/` | Pre-trained generator (SavedModel format) — not tracked in git, see [Pre-trained Model](#pre-trained-model) |
 | `tensorboard/checkpoints/` | Training checkpoints (created automatically, gitignored) |
 | `tensorboard/logs/` | TensorBoard logs (created automatically, gitignored) |
 | `results/` | Output images written by `predict.py` (gitignored) |
@@ -90,7 +89,6 @@ Fill_Texture/
 │   │   └── Tx/                 ← colour .png textures (3 channels)
 │   ├── full_heightmap/
 │   │   └── hm_2021.png         ← used by predict.py
-│   └── pre_trained_model/      ← downloaded from Zenodo, see below
 │
 ├── tensorboard/
 │   ├── checkpoints/            ← written automatically during training
@@ -105,7 +103,7 @@ Fill_Texture/
 
 ## Quick Test
 
-`src/config.py` ships pointed at the 35 example pairs in `testing_files/sample_images/`, with `STEPS = 1000`, so the pipeline can be verified end-to-end in a few minutes without the full dataset:
+`src/config.py` ships pointed at the 35 example pairs in `testing_files/sample_images/`, with `STEPS = 1000` and `BATCH_SIZE = 4`, so the pipeline can be verified end-to-end in a few minutes without the full dataset. The experiments reported in the paper used `BATCH_SIZE = 64` and `STEPS = 100000`.
 
 ```bash
 python -m src.train
@@ -113,7 +111,7 @@ python -m src.train
 
 Expected behaviour: the console prints a progress dot every 10 steps and the elapsed time every 1,000 steps, checkpoints are written to `tensorboard/checkpoints/`, and sample images appear under `tensorboard/logs/`. The output at 1,000 steps is not meant to look good — the test only verifies that the pipeline runs.
 
-To test inference with the pre-trained model (see [Pre-trained Model](#pre-trained-model) to obtain it):
+To test inference with a trained model (a model is produced by running the training script; see [Saving the Final Model](#saving-the-final-model)):
 
 ```bash
 python predict.py
@@ -283,25 +281,17 @@ For inference on a single 256×256 tile without the sliding-window logic:
 ```python
 import tensorflow as tf
 
-generator = tf.keras.models.load_model("testing_files/pre_trained_model")
+generator = tf.keras.models.load_model("path/to/your/saved_model")
 prediction = generator(heightmap_input, training=False)
 ```
 
 ---
 
-## Pre-trained Model
-
-The pre-trained generator (`testing_files/pre_trained_model/`) is **not** stored in this git repository — the model weights exceed GitHub's file size limit. It is hosted on Zenodo instead:
-
-<ZENODO 10.5281/zenodo.21792022 / [DOWNLOAD LINK](https://zenodo.org/records/21792022)>
-
-Download it and extract it into `testing_files/pre_trained_model/` before running `predict.py` or the inference snippet above.
-
----
-
 ## Who do I talk to? ###
 
-Davi Pereira Bossi, UNIFEI - Universidade Federal de Itajubá , davi.pereira2205@gmail.com
+Davi Pereira Bossi, UNIFEI — Federal University of Itajubá, davi.pereira2205@gmail.com
+
+Giovani Bernardes Vitor (corresponding author), UNIFEI — Federal University of Itajubá, giovanibernardes@unifei.edu.br
 
 ---
 

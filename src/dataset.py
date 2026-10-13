@@ -38,6 +38,13 @@ def generate_files_path_multi(pairs, pattern='*.png', strict=True):
 
 
 def train_val_split(hm_files, tx_files, val_ratio=0.10, seed=42):
+    """Randomly partitions the file lists into train/validation sets.
+
+    Note: the split is performed at the patch (file) level with no spatial
+    grouping. Patches cut from the same source orthomosaic can therefore fall
+    into both subsets, which may introduce spatial leakage; group by source
+    image if a fully independent validation set is required.
+    """
     assert len(hm_files) == len(tx_files), "Misaligned lists!"
 
     n = len(hm_files)
@@ -62,12 +69,12 @@ def train_val_split(hm_files, tx_files, val_ratio=0.10, seed=42):
 def load_pair(hm_path, tx_path, img_height, img_width):
     hm = tf.io.read_file(hm_path)
     hm = tf.image.decode_png(hm, channels=1)
-    hm = tf.cast(hm, tf.float32) / 127.5 - 1.0   # [-1, 1]
+    hm = tf.image.convert_image_dtype(hm, tf.float32) * 2.0 - 1.0   # [-1, 1]
     hm = tf.image.resize(hm, [img_height, img_width])
 
     tx = tf.io.read_file(tx_path)
     tx = tf.image.decode_png(tx, channels=3)
-    tx = tf.cast(tx, tf.float32) / 127.5 - 1.0   # [-1, 1]
+    tx = tf.image.convert_image_dtype(tx, tf.float32) * 2.0 - 1.0   # [-1, 1]
     tx = tf.image.resize(tx, [img_height, img_width])
 
     return hm, tx

@@ -94,7 +94,7 @@ def Discriminator():
     inp = tf.keras.layers.Input(shape=[256, 256, 1], name='input_image')
     tar = tf.keras.layers.Input(shape=[256, 256, 3], name='target_image')
 
-    x = tf.keras.layers.concatenate([inp, tar])  # (batch_size, 256, 256, channels*2)
+    x = tf.keras.layers.concatenate([inp, tar])  # (batch_size, 256, 256, 4) = 1 (heightmap) + 3 (RGB)
 
     down1 = downsample(64, 4, False)(x)  # (batch_size, 128, 128, 64)
     down2 = downsample(128, 4)(down1)  # (batch_size, 64, 64, 128)
